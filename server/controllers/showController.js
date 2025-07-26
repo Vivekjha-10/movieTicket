@@ -1,23 +1,8 @@
 import axios from "axios";
-import Movie from "../models/Movie.js";
+import Movie from "../models/MOvie.js";
 import Show from "../models/Show.js";
 
-// export const getNowPlayingMovies = async (req, res) => {
-//     try {
-//         await axios.get('https://api.themoviedb.org/3/movie/now_playing', {
-//             headers: {Authorization: `Bearer ${process.env.TMDB_API_KEY}`}
-//         })
-
-//         const movies = data.results;
-//         res.json({success: true, movies: movies})
-
-//     } catch (error) {
-//         console.error(error);
-//         res.json({success: false, message: error.message})
-//     }
-// }
-
-// API to get now playing movies from Tmdb API
+// ✅ Get Now Playing Movies from TMDB
 export const getNowPlayingMovies = async (req, res) => {
     try {
         const response = await axios.get('https://api.themoviedb.org/3/movie/now_playing', {
@@ -35,103 +20,113 @@ export const getNowPlayingMovies = async (req, res) => {
     }
 };
 
-// API to add a new show to the database
+// ✅ Add New Show
 export const addShow = async (req, res) => {
-    try {
-        const { movieId, showsInput, showPrice } = req.body;
+  try {
+    const { movieId, showsInput, showPrice } = req.body;
+    console.log("📩 Payload received:", req.body);
 
-        let movie = await Movie.findById(movieId);
-        if (!movie) {
-            // Fetch movie details from TMDB if not found in the database
-            const [movieDetailsResponse, movieCreditsResponse] = await Promise.all([
-                axios.get(`https://api.themoviedb.org/3/movie/${movieId}`, {
-                    headers: {
-                        Authorization: `Bearer ${process.env.TMDB_API_KEY}`
-                    }
-                }),
+    let movie = await Movie.findById(movieId);
+    if (!movie) {
+      const [movieDetailsResponse, movieCreditsResponse] = await Promise.all([
+        axios.get(`https://api.themoviedb.org/3/movie/${movieId}`, {
+          headers: { Authorization: `Bearer ${process.env.TMDB_API_KEY}` }
+        }),
+        axios.get(`https://api.themoviedb.org/3/movie/${movieId}/credits`, {
+          headers: { Authorization: `Bearer ${process.env.TMDB_API_KEY}` }
+        })
+      ]);
 
-                axios.get(`https://api.themoviedb.org/3/movie/${movieId}/credits`, {
-                    headers: {
-                        Authorization: `Bearer ${process.env.TMDB_API_KEY}`
-                    }
-                })
-            ]);
+      const movieApiData = movieDetailsResponse.data;
+      const movieCreditsData = movieCreditsResponse.data;
 
+      const movieDetails = {
+        _id: movieId,
+        title: movieApiData.title,
+        overview: movieApiData.overview,
+        poster_path: movieApiData.poster_path,
+        backdrop_path: movieApiData.backdrop_path,
+        genres: movieApiData.genres,
+        casts: movieCreditsData.cast,
+        release_date: movieApiData.release_date,
+        original_language: movieApiData.original_language,
+        tagline: movieApiData.tagline || "",
+        vote_average: movieApiData.vote_average,
+        runtime: movieApiData.runtime
+      };
 
-            const movieApiData = movieDetailsResponse.data;
-            const movieCreditsData = movieCreditsResponse.data;
-
-            const movieDetails = {
-                _id: movieId,
-                title: movieApiData.title,
-                overview: movieApiData.overview,
-                poster_path: movieApiData.poster_path,
-                backdrop_path: movieApiData.backdrop_path,
-                genres: movieApiData.genres,
-                casts: movieCreditsData.cast,
-                release_date: movieApiData.release_date,
-                original_language: movieApiData.original_language,
-                tagline: movieApiData.tagline || "",
-                vote_average: movieApiData.vote_average,
-                runtime: movieApiData.runtime
-            }
-            // Add movie to the database
-            movie = await Movie.create(movieDetails);
-        }
-
-        const showsToCreate = [];
-        showsInput.forEach(show => {
-            const showDate = show.date;
-            show.time.forEach((time) => {
-                const dateTimeString = `${showDate}T${time}`;
-                showsToCreate.push({
-                    movie: movieId,
-                    showDateTime: new Date(dateTimeString),
-                    showPrice,
-                    occupiedSeats: {}
-                })
-            })
-        });
-
-        if (showsToCreate.length > 0) {
-            await Show.insertMany(showsToCreate);
-        }
-
-        res.json({ success: true, message: "Shows added successfully" });
-
-
-    } catch (error) {
-        console.error(error);
-        res.json({ success: false, message: error.message });
+      movie = await Movie.create(movieDetails);
     }
+
+    const showsToCreate = [];
+    showsInput.forEach(show => {
+      const showDate = show.date;
+      show.time.forEach(time => {
+        const dateTimeString = `${showDate}T${time}`;
+        console.log("🕒 Final DateTime:", dateTimeString);
+        showsToCreate.push({
+          movie: movieId,
+          showDateTime: new Date(dateTimeString),
+          showPrice,
+          occupiedSeats: {}
+        });
+      });
+    });
+
+    console.log("🧾 Prepared shows:", showsToCreate);
+
+    if (showsToCreate.length > 0) {
+      const inserted = await Show.insertMany(showsToCreate);
+      console.log("🎉 Shows Inserted:", inserted);
+    }
+
+    res.json({ success: true, message: "Shows added successfully" });
+
+  } catch (error) {
+    console.error("❌ Error inserting shows:", error);
+    res.json({ success: false, message: error.message });
+  }
 };
 
-
-// API to get all shows from the database
-
+// ✅ Get All Shows (Only Future + Unique Movies)
+// ✅ Modified getShows
 export const getShows = async (req, res) => {
     try {
-        const shows = await Show.find({ showDateTime: { $gte: new Date()}}).populate
-            ('movie').sort({ showDateTime: 1 });
+        const now = new Date();
 
-        //filter unique shows
-        const uniqueShows = new Set(shows.map(show => show.movie))
+       const shows = await Show.find().populate('movie').sort({ showDateTime: 1 });
 
-        res.json({ success: true, shows: Array.from(uniqueShows)});
+        const uniqueShows = [];
+        const movieIds = new Set();
+
+        for (const show of shows) {
+            const movieId = show.movie._id.toString();
+            if (!movieIds.has(movieId)) {
+                uniqueShows.push(show);
+                movieIds.add(movieId);
+            }
+        }
+
+        console.log("Filtered Future Shows:", shows.length); // 🧪 Debug
+
+        res.json({ success: true, shows: uniqueShows });
     } catch (error) {
         console.error(error);
         res.json({ success: false, message: error.message });
     }
 };
 
-// API to get a single show from the database
 
+// ✅ Get All Upcoming Shows for a Specific Movie
 export const getShow = async (req, res) => {
     try {
         const { movieId } = req.params;
 
-        //get all upcoming shows for a movie
-        const shows = await Show.find({ movie: movieId, showDateTime: { $gte: new Date() }})
+        const shows = await Show.find({
+            movie: movieId,
+            showDateTime: { $gte: new Date() }
+        });
+
         const movie = await Movie.findById(movieId);
         const dateTime = {};
 
@@ -141,10 +136,11 @@ export const getShow = async (req, res) => {
                 dateTime[date] = [];
             }
             dateTime[date].push({ time: show.showDateTime, showId: show._id });
-        })
-        res.json({ success: true, movie, shows: dateTime });
+        });
+
+        res.json({ success: true,  show:{ movie, showTimes: dateTime }});
     } catch (error) {
         console.error(error);
         res.json({ success: false, message: error.message });
     }
-}
+};
