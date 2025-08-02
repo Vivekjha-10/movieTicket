@@ -1,5 +1,4 @@
 import React, { useEffect, useState } from 'react'
-import { dummyBookingData } from '../assets/assets'
 import BlurCircle from '../components/BlurCircle'
 import Loading from '../components/Loading'
 import timeFormat from '../lib/timeFormat'
@@ -11,11 +10,11 @@ const MyBookings = () => {
   const currency = import.meta.env.VITE_CURRENCY
 
   const {
-      axios,
-      user,
-      getToken, 
-      image_base_url
-    } = useAppContext();
+    axios,
+    user,
+    getToken,
+    image_base_url
+  } = useAppContext();
 
   const [bookings, setBookings] = useState([])
   const [isLoading, setIsLoading] = useState(true)
@@ -38,8 +37,8 @@ const MyBookings = () => {
     if (user) {
       getMyBookings()
     }
-  }, [])
-
+  }, [user])
+ 
   return !isLoading ? (
     <div className='relative px-6 md:px-16 lg:px-40 pt-30 md:pt-40 min-h-[80vh]'>
       <BlurCircle top='100px' left='100px' />

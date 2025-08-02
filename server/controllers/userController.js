@@ -1,7 +1,6 @@
 import Booking from "../models/Booking.js";
 import { clerkClient } from "@clerk/express";
-import Movie from "../models/MOvie.js";
-import Favorite from "../models/Favorite.js";
+import Movie from "../models/Movie.js";
 
 
 
